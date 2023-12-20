@@ -2,35 +2,31 @@
     <button @click="tick()">tick</button>
     {{ k }}
     {{ blackRate*4 }}
+    {{ pivots.length }}
 </template>
 <script setup lang="ts">
 import p5 from 'p5';
 import { onMounted, ref } from 'vue';
+import { sub_process, isInCircle } from "./utils/sub_process"
 
 let pivots: [x: number, y: number][] = [[0,0]]
 const blackRate = ref(0)
 
-function isInCircle(x: number, y: number){
-    return x**2 + y**2 < 1
-}
-
 const k = ref(0)
-function tick(){
-    const length = 1/(2 ** k.value)
-    const newPivots: [number, number][] = []
-    pivots.forEach(([x, y]) => {
-        const lbIsin = isInCircle(x, y)
-        const rtIsin = isInCircle(x+length,y+length)
+const span = 2**5
 
-        if( lbIsin && !rtIsin ){
-            newPivots.push([ x, y ])
-            newPivots.push([ x, y+length/2 ])
-            newPivots.push([ x+length/2, y+length/2 ])
-            if(x < y) newPivots.push([ x+length/2, y ])
-        }else if( lbIsin ){
-            blackRate.value += (length ** 2) * ( x == y ? 1 : 2 )
-        }
-    })
+function tick(){
+    const newPivots: [number, number][] = []
+    while( span < pivots.length ){
+        const { newPivots: newPivotsInSpan, blackRateIncremental } = sub_process(k.value, pivots.splice(0, span))
+        newPivots.push(...newPivotsInSpan)
+        blackRate.value += blackRateIncremental
+        console.log("hey!")
+    }
+    const { newPivots: newPivotsInSpan, blackRateIncremental } = sub_process(k.value, pivots)
+    newPivots.push(...newPivotsInSpan)
+    blackRate.value += blackRateIncremental
+
     pivots = newPivots
     k.value++
 }
