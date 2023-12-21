@@ -28,6 +28,7 @@ async function connect(){
     while(port.readable){
         const reader = port.readable.getReader();
         try {
+            let text = ""
             while(true){
                 const { value, done } = await reader.read();
                 if (done) {
@@ -36,7 +37,12 @@ async function connect(){
                 }
                 //👇生データはバイナリなので、ユニコード文字へデコード
                 const inputValue = new TextDecoder().decode(value);
-                console.log(inputValue);
+                if( inputValue.includes("\n") ){
+                    console.log(text)
+                    text = ""
+                }else{
+                    text += inputValue
+                }
             }
         } catch (error) {
             console.log("ERROR: 読み出し失敗");
