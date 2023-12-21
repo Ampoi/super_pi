@@ -1,5 +1,7 @@
 <template>
-    <button @click="tick()">tick</button>
+    <button @click="tick">tick</button>
+    <button @click="connect">connect</button>
+    <button @click="() => sendMessage('hey!')">send</button>
     {{ k }}
     {{ blackRate*4 }}
     {{ pivots.length }}
@@ -12,6 +14,47 @@ import { sub_process, isInCircle } from "./utils/sub_process"
 let pivots: [x: number, y: number][] = [[0,0]]
 let pivots_to_draw: [x: number, y: number][] = pivots
 const blackRate = ref(0)
+
+let writer: WritableStreamDefaultWriter<Uint8Array>
+
+async function connect(){
+    const port = await navigator.serial.requestPort()
+    await port.open({ baudRate: 9600 })
+
+    const writerStream = port.writable?.getWriter();
+    if( !writerStream ) throw new Error("😢")
+    writer = writerStream
+
+    while(port.readable){
+        const reader = port.readable.getReader();
+        try {
+            while(true){
+                const { value, done } = await reader.read();
+                if (done) {
+                    console.log("INFO: 読込モード終了");
+                    break;
+                }
+                //👇生データはバイナリなので、ユニコード文字へデコード
+                const inputValue = new TextDecoder().decode(value);
+                console.log(inputValue);
+            }
+        } catch (error) {
+            console.log("ERROR: 読み出し失敗");
+            console.log(error);
+        } finally {
+            reader.releaseLock();
+            await port.close();
+            console.log("INFO: 接続を切断しました");
+        }
+    }
+}
+
+async function sendMessage(message: string) {
+    if (writer) {
+        const data = new TextEncoder().encode(message + '\n');
+        await writer.write(data);
+    }
+}
 
 const k = ref(0)
 const span = 2**5
