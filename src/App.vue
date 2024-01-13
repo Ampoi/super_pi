@@ -2,20 +2,64 @@
     <button @click="tick">tick</button>
     <button @click="connect">connect</button>
     <button @click="() => sendMessage('hey!')">send</button>
-    {{ k }}
-    {{ blackRate*4 }}
-    {{ pivots.length }}
+    <p>episode: {{ showData.episode }}</p>
+    <p>PI: {{ showData.pi }}</p>
+    <p>Match Rate: {{ showData.matchRate }}%</p>
 </template>
 <script setup lang="ts">
-import p5 from 'p5';
-import { onMounted, ref } from 'vue';
-import { sub_process, isInCircle } from "./utils/sub_process"
-
-let pivots: [x: number, y: number][] = [[0,0]]
-let pivots_to_draw: [x: number, y: number][] = pivots
-const blackRate = ref(0)
+import { reactive } from 'vue';
 
 let writer: WritableStreamDefaultWriter<Uint8Array>
+
+abstract class Process {
+    public readonly name: string
+    
+    constructor(){
+        this.name = "MA-462X"
+    }
+
+    abstract execute(episode: number, pivots: [number, number][]): Promise<{
+        newPivots: [x: number, y: number][];
+        blackRateIncremental: number;
+    }>
+}
+
+function isInCircle(x: number, y: number){
+    return x**2 + y**2 < 1
+}
+
+class BrowserProcess extends Process {
+    execute( episode: number, pivots: [x: number, y: number][] ){
+        return new Promise<{
+            newPivots: [x: number, y: number][];
+            blackRateIncremental: number;
+        }>((resolve) => {
+            const length = 1/(2 ** episode)
+        
+            let blackRateIncremental = 0
+            const newPivots: [number, number][] = []
+
+            pivots.forEach(([x, y]) => {
+                const lbIsin = isInCircle(x, y)
+                const rtIsin = isInCircle(x+length,y+length)
+
+                if( lbIsin && !rtIsin ){
+                    newPivots.push([ x, y ])
+                    newPivots.push([ x, y+length/2 ])
+                    newPivots.push([ x+length/2, y+length/2 ])
+                    if(x < y) newPivots.push([ x+length/2, y ])
+                }else if( lbIsin ){
+                    blackRateIncremental += (length ** 2) * ( x == y ? 1 : 2 )
+                }
+            })
+            
+            resolve({
+                newPivots,
+                blackRateIncremental
+            })
+        })
+    }
+}
 
 async function connect(){
     const port = await navigator.serial.requestPort()
@@ -27,30 +71,17 @@ async function connect(){
 
     while(port.readable){
         const reader = port.readable.getReader();
-        try {
-            let text = ""
-            while(true){
-                const { value, done } = await reader.read();
-                if (done) {
-                    console.log("INFO: 読込モード終了");
-                    break;
-                }
-                //👇生データはバイナリなので、ユニコード文字へデコード
-                const inputValue = new TextDecoder().decode(value);
-                if( inputValue.includes("\n") ){
-                    console.log(text)
-                    text = ""
-                }else{
-                    text += inputValue
-                }
+        
+        let text = ""
+        while(true){
+            const { value } = await reader.read();
+            const inputValue = new TextDecoder().decode(value);
+            if( inputValue.includes("\n") ){
+                console.log(text)
+                text = ""
+            }else{
+                text += inputValue
             }
-        } catch (error) {
-            console.log("ERROR: 読み出し失敗");
-            console.log(error);
-        } finally {
-            reader.releaseLock();
-            await port.close();
-            console.log("INFO: 接続を切断しました");
         }
     }
 }
@@ -62,68 +93,68 @@ async function sendMessage(message: string) {
     }
 }
 
-const k = ref(0)
-const span = 2**5
+let k = 0
+let pivots: [x: number, y: number][] = [[0,0]]
+let blackRate = 0
 
-const amount = 1000
-function getSomeElements<T>(arr: T[]) {
-  const result = [];
-  const totalElements = arr.length;
-  const interval = Math.ceil(totalElements / amount);
+const showData = reactive({
+    episode: k,
+    pi: 0,
+    matchRate: 0
+})
 
-  for (let i = 0; i < totalElements; i += interval) {
-    result.push(arr[i]);
-    if (result.length >= amount) break
-  }
-
-  return result;
+function updateShowData(){
+    showData.episode = k
+    showData.pi = blackRate * 4
+    showData.matchRate = blackRate * 4 / Math.PI * 100
+    requestAnimationFrame(updateShowData)
 }
 
-function tick(){
-    const newPivots: [number, number][] = []
-    while( span < pivots.length ){
-        const { newPivots: newPivotsInSpan, blackRateIncremental } = sub_process(k.value, pivots.splice(0, span))
-        newPivots.push(...newPivotsInSpan)
-        blackRate.value += blackRateIncremental
-        console.log("hey!")
+updateShowData()
+
+const processes: Process[] = reactive([
+    new BrowserProcess(),
+    new BrowserProcess(),
+    new BrowserProcess(),
+    new BrowserProcess()
+])
+
+const span = 2**15
+
+function pushEach<T extends any[]>(to: T, value: T){
+    value.forEach(a => { to.push(a) })
+}
+
+async function assignProcess(process: Process, newPivots: [number, number][], onFinish: () => void): Promise<boolean> {
+    if( pivots.length < span ){
+        onFinish()
+        return true
     }
-    const { newPivots: newPivotsInSpan, blackRateIncremental } = sub_process(k.value, pivots)
-    newPivots.push(...newPivotsInSpan)
-    blackRate.value += blackRateIncremental
 
-    pivots = newPivots
-    pivots_to_draw = getSomeElements<[x: number, y: number]>(pivots)
-    k.value++
+    const { blackRateIncremental, newPivots: newSpanPivots } = await process.execute(k, pivots.splice(0, span))
+    blackRate += blackRateIncremental
+    pushEach(newPivots, newSpanPivots)
+
+    const stop = await assignProcess(process, newPivots, onFinish)
+    return stop
 }
 
-onMounted(() => {
-    new p5((p: p5) => {
-        p.setup = () => {
-            p.createCanvas(800, 800)
-        }
-        
-        p.draw = () => {
-            p.background(200)
-            p.fill(180)
-            //const scale = 1.8**k.value
-            //p.scale(scale)
-            //p.translate(p.width * (- 1/2**0.5) + p.width / 2 * (1 / scale), -p.width * (1 - 1/2**0.5) + p.width / 2 * (1 / scale))
-            //p.strokeWeight(3/scale)
-            p.strokeWeight(3)
-            p.stroke(150)
-            p.circle(0, p.height, p.height*2)
+async function tick(){
+    const newPivots: [number, number][] = []
 
-            p.noStroke()
-            pivots_to_draw.forEach(([x, y]) => {
-                const length = 1/(2 ** k.value)
-                const lbIsin = isInCircle(x, y)
-                const rtIsin = isInCircle(x+length,y+length)
-                const lineColor = lbIsin && rtIsin ? "black" : lbIsin ? "blue" : "white"
-
-                p.stroke(lineColor)
-                p.line(x*p.width, (1-y)*p.width, (x+length)*p.width, (1-(y+length))*p.width)
+    await new Promise((resolve) => {
+        for( const process of processes ){
+            assignProcess(process, newPivots, async () => {
+                const { blackRateIncremental, newPivots: newSpanPivots } = await processes[0].execute(k, pivots.splice(0, span))
+                blackRate += blackRateIncremental
+                pushEach(newPivots, newSpanPivots)
+                
+                resolve("finished")
             })
         }
     })
-})
+
+    pivots = newPivots
+    k++
+}
 </script>
