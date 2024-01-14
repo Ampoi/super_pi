@@ -4,7 +4,7 @@
             <p class="text-4xl">{{ showData.pi }}</p>
             <p>{{ showData.matchRate }}%</p>
         </div>
-        <div class="basis-1/2 flex flex-col items-center">
+        <div class="basis-1/2 flex flex-col gap-4 items-center">
             <div class="flex flex-row gap-8">
                 <button
                     class="border-2 border-white shadow-xl shadow-slate-400/5 p-2"
@@ -22,7 +22,14 @@
                     send
                 </button>
             </div>
-            <p class="mt-4">episode: {{ showData.episode }}</p>
+            <p>episode: {{ showData.episode }}</p>
+            <div class="flex flex-col gap-4 max-w-2xl w-full">
+                <div
+                    v-for="process in processes"
+                    class="p-4 flex flex-row gap-4 items-center">
+                    {{  process.name }}
+                </div>
+            </div>
         </div>
     </main>
 </template>
@@ -31,11 +38,22 @@ import { reactive } from 'vue';
 
 let writer: WritableStreamDefaultWriter<Uint8Array>
 
+function getRandomValue<T>(array: T[]): T {
+    return array[Math.floor(Math.random() * array.length)]
+}
 abstract class Process {
     public readonly name: string
     
     constructor(){
+        const start = "A".charCodeAt(0);
+        const alphabetArray = Array.from({ length: 26 }).map((_, i) => String.fromCharCode(start+i))
         this.name = "MA-462X"
+        this.name =
+            getRandomValue(alphabetArray) +
+            getRandomValue(alphabetArray) +
+            "-" +
+            String(Math.floor(Math.random() * 999)).padStart(3, "0") + 
+            getRandomValue(alphabetArray.slice(23, 25))
     }
 
     abstract execute(episode: number, pivots: [number, number][]): Promise<{
@@ -139,7 +157,7 @@ const processes: Process[] = reactive([
     new BrowserProcess()
 ])
 
-const span = 2**15
+const span = 2**20
 
 function pushEach<T extends any[]>(to: T, value: T){
     value.forEach(a => { to.push(a) })
@@ -153,7 +171,10 @@ async function assignProcess(process: Process, newPivots: [number, number][], on
 
     const { blackRateIncremental, newPivots: newSpanPivots } = await process.execute(k, pivots.splice(0, span))
     blackRate += blackRateIncremental
+    const label = Math.random().toString()
+    console.time(label)
     pushEach(newPivots, newSpanPivots)
+    console.timeEnd(label)
 
     const stop = await assignProcess(process, newPivots, onFinish)
     return stop
@@ -161,6 +182,9 @@ async function assignProcess(process: Process, newPivots: [number, number][], on
 
 async function tick(){
     const newPivots: [number, number][] = []
+
+    console.clear()
+    console.time("tick")
 
     await new Promise((resolve) => {
         for( const process of processes ){
@@ -173,6 +197,8 @@ async function tick(){
             })
         }
     })
+
+    console.timeEnd("tick")
 
     pivots = newPivots
     k++
