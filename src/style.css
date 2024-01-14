@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+    font-family: "Melete";
+    src: url('./fonts/melete_0200/Melete-Regular.otf');
+}

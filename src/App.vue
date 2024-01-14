@@ -1,10 +1,30 @@
 <template>
-    <button @click="tick">tick</button>
-    <button @click="connect">connect</button>
-    <button @click="() => sendMessage('hey!')">send</button>
-    <p>episode: {{ showData.episode }}</p>
-    <p>PI: {{ showData.pi }}</p>
-    <p>Match Rate: {{ showData.matchRate }}%</p>
+    <main class="px-8 py-16 bg-slate-100 w-screen h-screen flex flex-col gap-4 font-[Melete]">
+        <div class="text-center">
+            <p class="text-4xl">{{ showData.pi }}</p>
+            <p>{{ showData.matchRate }}%</p>
+        </div>
+        <div class="basis-1/2 flex flex-col items-center">
+            <div class="flex flex-row gap-8">
+                <button
+                    class="border-2 border-white shadow-xl shadow-slate-400/5 p-2"
+                    @click="tick">
+                    tick
+                </button>
+                <button
+                    class="border-2 border-white shadow-xl shadow-slate-400/5 p-2"
+                    @click="connect">
+                    connect
+                </button>
+                <button
+                    class="border-2 border-white shadow-xl shadow-slate-400/5 p-2"
+                    @click="() => sendMessage('hey!')">
+                    send
+                </button>
+            </div>
+            <p class="mt-4">episode: {{ showData.episode }}</p>
+        </div>
+    </main>
 </template>
 <script setup lang="ts">
 import { reactive } from 'vue';
